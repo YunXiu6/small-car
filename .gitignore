@@ -1,0 +1,33 @@
+# Build outputs
+**/Objects/
+**/Listings/
+**/Project Outputs*/
+**/Project Logs*/
+*.o
+*.d
+*.crf
+*.axf
+*.map
+*.lst
+*.lnp
+*.sct
+*.htm
+*.html
+*.dep
+
+# Editor and tool caches
+**/.vscode/*.log
+**/.vscode/*.lock
+**/__Previews/
+
+# Archives and generated backups
+*.rar
+*.zip
+*.7z
+*.bak
+*.backup
+*.tmp
+**/History/
+
+# Local Keil user state
+*.uvguix.*
