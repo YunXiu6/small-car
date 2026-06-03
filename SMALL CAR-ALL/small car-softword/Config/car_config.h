@@ -12,6 +12,8 @@
 #define CAR_OBSTACLE_STOP_CM      18U
 #define CAR_OBSTACLE_CLEAR_CM     28U
 #define CAR_REMOTE_TIMEOUT_MS     900U
+#define CAR_US_MIN_VALID_CM       3U
+#define CAR_US_CLOSE_CONFIRM      2U
 
 #define PIN_MASK(pin)             (1U << (pin))
 
@@ -25,10 +27,10 @@
 #define MOTOR_BIN1_PIN            14U
 #define MOTOR_BIN2_PIN            15U
 
-/* Ultrasonic module. The schematic labels PA5 as Trig and PA6 as Echo. */
+/* Ultrasonic module: PA4 = Trig, PA5 = Echo on the current wiring. */
 #define US_PORT                   GPIOA
-#define US_TRIG_PIN               5U
-#define US_ECHO_PIN               6U
+#define US_TRIG_PIN               4U
+#define US_ECHO_PIN               5U
 
 /* Encoder is optional. The schematic motor connectors expose only two motor wires. */
 #define CAR_USE_ENCODER           0
