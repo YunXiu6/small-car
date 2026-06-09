@@ -2,6 +2,7 @@
 #include "bsp_gpio.h"
 #include "car_config.h"
 
+/* Clamp signed speed commands so PWM duty never exceeds TIM2 ARR range. */
 static int16_t clamp_speed(int16_t speed)
 {
     if (speed > CAR_SPEED_MAX)
@@ -21,6 +22,7 @@ static void set_channel_a(int16_t speed)
     speed = clamp_speed(speed);
     duty = (uint16_t)((speed >= 0) ? speed : -speed);
 
+    /* Sign selects H-bridge direction; magnitude becomes PWM duty. */
     if (speed > 0)
     {
         Bsp_GpioWrite(MOTOR_DIR_PORT, MOTOR_AIN1_PIN, 1U);
@@ -46,6 +48,7 @@ static void set_channel_b(int16_t speed)
     speed = clamp_speed(speed);
     duty = (uint16_t)((speed >= 0) ? speed : -speed);
 
+    /* Sign selects H-bridge direction; magnitude becomes PWM duty. */
     if (speed > 0)
     {
         Bsp_GpioWrite(MOTOR_DIR_PORT, MOTOR_BIN1_PIN, 1U);
@@ -67,6 +70,7 @@ static void set_channel_b(int16_t speed)
 
 void Motor_Init(void)
 {
+    /* TIM2 CH1/CH2 generate PWM for the two motor channels. */
     RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
 
     Bsp_GpioConfig(MOTOR_PWM_PORT, MOTOR_PWMA_PIN, GPIO_MODE_AF_PP_50MHZ);
@@ -76,6 +80,7 @@ void Motor_Init(void)
     Bsp_GpioConfig(MOTOR_DIR_PORT, MOTOR_BIN1_PIN, GPIO_MODE_OUT_PP_2MHZ);
     Bsp_GpioConfig(MOTOR_DIR_PORT, MOTOR_BIN2_PIN, GPIO_MODE_OUT_PP_2MHZ);
 
+    /* PWM mode 1 with preload enabled; ARR is the maximum accepted speed value. */
     TIM2->PSC = 0U;
     TIM2->ARR = CAR_PWM_PERIOD;
     TIM2->CCR1 = 0U;
@@ -89,8 +94,9 @@ void Motor_Init(void)
 
 void Motor_SetSpeed(int16_t left, int16_t right)
 {
-    set_channel_a(left);
-    set_channel_b(right);
+    /* The installed motor wiring runs opposite to the logical car direction. */
+    set_channel_a((int16_t)-left);
+    set_channel_b((int16_t)-right);
 }
 
 void Motor_Stop(void)
@@ -101,6 +107,7 @@ void Motor_Stop(void)
 
 void Motor_Brake(void)
 {
+    /* Disable PWM first, then command the TB6612FNG short-brake input state. */
     TIM2->CCR1 = 0U;
     TIM2->CCR2 = 0U;
     Bsp_GpioWrite(MOTOR_DIR_PORT, MOTOR_AIN1_PIN, 1U);

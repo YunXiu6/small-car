@@ -3,6 +3,7 @@
 #include "bsp_time.h"
 #include "car_config.h"
 
+/* Live measurement state used by the application display and serial debug output. */
 volatile uint16_t g_ultrasonic_distance_cm;
 volatile uint32_t g_ultrasonic_echo_width_us;
 volatile uint32_t g_ultrasonic_trig_count;
@@ -13,6 +14,7 @@ static uint32_t elapsed_systick(uint32_t start, uint32_t now)
 {
     uint32_t reload = SysTick->LOAD + 1UL;
 
+    /* SysTick counts down, so elapsed ticks may cross the reload boundary. */
     if (start >= now)
     {
         return start - now;
@@ -35,6 +37,7 @@ static uint32_t elapsed_us(uint32_t *last_tick)
 
 void Ultrasonic_Init(void)
 {
+    /* Trig is push-pull output; Echo is read as a digital input. */
     Bsp_GpioConfig(US_PORT, US_TRIG_PIN, GPIO_MODE_OUT_PP_2MHZ);
     Bsp_GpioConfig(US_PORT, US_ECHO_PIN, GPIO_MODE_IN_PULL);
     Bsp_GpioWrite(US_PORT, US_ECHO_PIN, 0U);
@@ -52,12 +55,14 @@ UltrasonicStatus Ultrasonic_ReadCmEx(uint16_t *distance_cm)
     g_ultrasonic_echo_width_us = 0U;
     g_ultrasonic_echo_level = Bsp_GpioRead(US_PORT, US_ECHO_PIN);
 
+    /* Echo must be low before a trigger. High here usually means wiring or sensor fault. */
     if (g_ultrasonic_echo_level)
     {
         g_ultrasonic_status = ULTRASONIC_ECHO_STUCK_HIGH;
         return ULTRASONIC_ECHO_STUCK_HIGH;
     }
 
+    /* Generate the standard >10 us trigger pulse. */
     Bsp_GpioWrite(US_PORT, US_TRIG_PIN, 0U);
     Bsp_DelayUs(3U);
     Bsp_GpioWrite(US_PORT, US_TRIG_PIN, 1U);
@@ -66,6 +71,7 @@ UltrasonicStatus Ultrasonic_ReadCmEx(uint16_t *distance_cm)
     g_ultrasonic_trig_count++;
 
     start_ms = Bsp_Millis();
+    /* Wait for the rising edge, but do not block forever when no echo returns. */
     while (Bsp_GpioRead(US_PORT, US_ECHO_PIN) == 0U)
     {
         if ((uint32_t)(Bsp_Millis() - start_ms) > 30U)
@@ -77,6 +83,7 @@ UltrasonicStatus Ultrasonic_ReadCmEx(uint16_t *distance_cm)
 
     start_tick = SysTick->VAL;
     start_ms = Bsp_Millis();
+    /* Echo high width is proportional to distance; 58 us is about 1 cm round trip. */
     while (Bsp_GpioRead(US_PORT, US_ECHO_PIN))
     {
         width_us += elapsed_us(&start_tick);

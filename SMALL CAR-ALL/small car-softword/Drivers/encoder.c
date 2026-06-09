@@ -4,6 +4,7 @@
 
 void Encoder_Init(void)
 {
+    /* TIM3 counts quadrature edges from the A/B inputs without CPU polling. */
     RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
 
     Bsp_GpioConfig(ENCODER_PORT, ENCODER_A_PIN, GPIO_MODE_IN_PULL);
@@ -11,6 +12,7 @@ void Encoder_Init(void)
     Bsp_GpioWrite(ENCODER_PORT, ENCODER_A_PIN, 1U);
     Bsp_GpioWrite(ENCODER_PORT, ENCODER_B_PIN, 1U);
 
+    /* Encoder mode 3 counts on both TI1 and TI2 transitions. */
     TIM3->PSC = 0U;
     TIM3->ARR = 0xFFFFU;
     TIM3->SMCR = 3U;
@@ -22,6 +24,7 @@ void Encoder_Init(void)
 
 int16_t Encoder_ReadDelta(void)
 {
+    /* Cast the 16-bit timer count to signed so reverse motion becomes negative. */
     int16_t delta = (int16_t)TIM3->CNT;
     TIM3->CNT = 0U;
     return delta;

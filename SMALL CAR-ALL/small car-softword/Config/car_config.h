@@ -3,18 +3,20 @@
 
 #include "stm32f10x.h"
 
+/* Core timing and motion parameters used by BSP, drivers, and application logic. */
 #define CAR_SYSCLK_HZ             72000000UL
 #define CAR_APB1_TIM_HZ           72000000UL
 #define CAR_PWM_PERIOD            999U
 #define CAR_SPEED_MAX             1000
 #define CAR_DEFAULT_SPEED         450
 #define CAR_TURN_SPEED            420
-#define CAR_OBSTACLE_STOP_CM      18U
-#define CAR_OBSTACLE_CLEAR_CM     28U
+#define CAR_OBSTACLE_STOP_CM      5U
+#define CAR_OBSTACLE_CLEAR_CM     10U
 #define CAR_REMOTE_TIMEOUT_MS     900U
 #define CAR_US_MIN_VALID_CM       3U
 #define CAR_US_CLOSE_CONFIRM      2U
 
+/* Convert a 0-15 pin index into a register bit mask. */
 #define PIN_MASK(pin)             (1U << (pin))
 
 /* TB6612FNG: PA0/PA1 PWM, PB12-PB15 direction. */

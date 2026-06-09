@@ -11,6 +11,7 @@
 #define MPU_REG_PWR_MGMT_1     0x6BU
 #define MPU_REG_WHO_AM_I       0x75U
 
+/* Poll one I2C status bit with a bounded timeout to avoid permanent lockup. */
 static uint8_t wait_flag(volatile uint16_t *reg, uint16_t mask, uint8_t set)
 {
     uint32_t timeout = 50000U;
@@ -26,6 +27,7 @@ static uint8_t wait_flag(volatile uint16_t *reg, uint16_t mask, uint8_t set)
 
 static void i2c2_init(void)
 {
+    /* I2C2 uses PB10/PB11 and runs from the 36 MHz APB1 peripheral clock. */
     RCC->APB1ENR |= RCC_APB1ENR_I2C2EN;
 
     Bsp_GpioConfig(MPU_PORT, MPU_SCL_PIN, GPIO_MODE_AF_OD_50MHZ);
@@ -43,6 +45,7 @@ static uint8_t i2c_write(uint8_t dev, uint8_t reg, uint8_t value)
 {
     volatile uint16_t tmp;
 
+    /* Single-register write: START, address, register, data, STOP. */
     if (I2C2->SR2 & I2C_SR2_BUSY)
     {
         return 0U;
@@ -66,6 +69,7 @@ static uint8_t i2c_read(uint8_t dev, uint8_t reg, uint8_t *buf, uint8_t len)
     volatile uint16_t tmp;
     uint8_t i;
 
+    /* Combined write-read transaction: set register address, repeated START, read bytes. */
     if (len == 0U || (I2C2->SR2 & I2C_SR2_BUSY))
     {
         return 0U;
@@ -91,6 +95,7 @@ static uint8_t i2c_read(uint8_t dev, uint8_t reg, uint8_t *buf, uint8_t len)
     {
         if (i == (uint8_t)(len - 1U))
         {
+            /* NACK the final byte and issue STOP as required by STM32F1 I2C receive flow. */
             I2C2->CR1 &= (uint16_t)~I2C_CR1_ACK;
             I2C2->CR1 |= I2C_CR1_STOP;
         }
@@ -106,6 +111,7 @@ uint8_t MPU6050_Init(void)
     uint8_t id = 0U;
     i2c2_init();
     Bsp_DelayMs(100U);
+    /* WHO_AM_I is checked after bus setup, but the device is still configured if readable. */
     (void)i2c_read(MPU6050_ADDR, MPU_REG_WHO_AM_I, &id, 1U);
     if (!i2c_write(MPU6050_ADDR, MPU_REG_PWR_MGMT_1, 0x00U)) return 0U;
     (void)i2c_write(MPU6050_ADDR, MPU_REG_SMPLRT_DIV, 0x07U);
@@ -122,6 +128,7 @@ uint8_t MPU6050_ReadRaw(Mpu6050Raw *data)
     {
         return 0U;
     }
+    /* Sensor registers are big-endian high-byte/low-byte pairs. */
     data->ax = (int16_t)((buf[0] << 8) | buf[1]);
     data->ay = (int16_t)((buf[2] << 8) | buf[3]);
     data->az = (int16_t)((buf[4] << 8) | buf[5]);
@@ -135,5 +142,6 @@ uint8_t MPU6050_ReadRaw(Mpu6050Raw *data)
 uint8_t MPU6050_IsTilted(const Mpu6050Raw *data)
 {
     int16_t z = data->az;
+    /* When the car is near level, Z acceleration should be far from zero. */
     return (z < 2500 && z > -2500) ? 1U : 0U;
 }

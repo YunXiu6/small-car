@@ -1,6 +1,7 @@
 #include "bsp_time.h"
 #include "car_config.h"
 
+/* Millisecond tick incremented from SysTick_Handler. */
 static volatile uint32_t s_ms;
 
 void Bsp_TimeInit(void)
@@ -20,6 +21,7 @@ uint32_t Bsp_Micros(void)
     uint32_t val;
     uint32_t load = SysTick->LOAD + 1UL;
 
+    /* Re-read s_ms if SysTick rolls while sampling VAL, keeping the result coherent. */
     do
     {
         ms1 = s_ms;
@@ -45,6 +47,7 @@ void Bsp_DelayUs(uint32_t us)
     uint32_t last = SysTick->VAL;
     uint32_t elapsed = 0UL;
 
+    /* SysTick counts down, so handle both normal progress and reload wraparound. */
     while (elapsed < target_ticks)
     {
         uint32_t now = SysTick->VAL;
@@ -62,5 +65,6 @@ void Bsp_DelayUs(uint32_t us)
 
 void SysTick_Handler(void)
 {
+    /* Global millisecond time base for cooperative scheduling. */
     s_ms++;
 }

@@ -3,6 +3,7 @@
 #include "bsp_time.h"
 #include "car_config.h"
 
+/* 6x8 fixed-width font table for printable ASCII from space through uppercase Z. */
 static const uint8_t font6x8[][6] = {
     {0x00,0x00,0x00,0x00,0x00,0x00}, /* space */
     {0x00,0x00,0x5F,0x00,0x00,0x00}, /* ! */
@@ -67,6 +68,7 @@ static const uint8_t font6x8[][6] = {
 
 static void i2c_delay(void)
 {
+    /* Software I2C timing margin; 2 us keeps the bus comfortably below fast mode. */
     Bsp_DelayUs(2U);
 }
 
@@ -75,6 +77,7 @@ static void sda(uint8_t v) { Bsp_GpioWrite(OLED_PORT, OLED_SDA_PIN, v); }
 
 static void start(void)
 {
+    /* I2C start: SDA falls while SCL is high. */
     sda(1U); scl(1U); i2c_delay();
     sda(0U); i2c_delay();
     scl(0U);
@@ -82,6 +85,7 @@ static void start(void)
 
 static void stop(void)
 {
+    /* I2C stop: SDA rises while SCL is high. */
     sda(0U); scl(1U); i2c_delay();
     sda(1U); i2c_delay();
 }
@@ -89,6 +93,7 @@ static void stop(void)
 static void send_byte(uint8_t data)
 {
     uint8_t i;
+    /* Send MSB first. ACK is clocked but not sampled to keep this driver minimal. */
     for (i = 0U; i < 8U; i++)
     {
         sda((data & 0x80U) ? 1U : 0U);
@@ -103,6 +108,7 @@ static void send_byte(uint8_t data)
 
 static void write_cmd(uint8_t cmd)
 {
+    /* Control byte 0x00 selects command stream. */
     start();
     send_byte(OLED_ADDR);
     send_byte(0x00U);
@@ -112,6 +118,7 @@ static void write_cmd(uint8_t cmd)
 
 static void write_data(uint8_t data)
 {
+    /* Control byte 0x40 selects display data stream. */
     start();
     send_byte(OLED_ADDR);
     send_byte(0x40U);
@@ -121,6 +128,7 @@ static void write_data(uint8_t data)
 
 static void set_pos(uint8_t x, uint8_t page)
 {
+    /* SSD1306 page addressing: page is 0..7, x is the column address. */
     write_cmd((uint8_t)(0xB0U + page));
     write_cmd((uint8_t)(0x10U | ((x >> 4) & 0x0FU)));
     write_cmd((uint8_t)(x & 0x0FU));
@@ -128,12 +136,14 @@ static void set_pos(uint8_t x, uint8_t page)
 
 void OLED_Init(void)
 {
+    /* Open-drain GPIO lets the software bus emulate I2C pull-up behavior. */
     Bsp_GpioConfig(OLED_PORT, OLED_SCL_PIN, GPIO_MODE_OUT_OD_2MHZ);
     Bsp_GpioConfig(OLED_PORT, OLED_SDA_PIN, GPIO_MODE_OUT_OD_2MHZ);
     scl(1U);
     sda(1U);
     Bsp_DelayMs(80U);
 
+    /* Standard SSD1306 init sequence for 128x64 displays. */
     write_cmd(0xAEU);
     write_cmd(0x20U); write_cmd(0x02U);
     write_cmd(0xB0U);
@@ -160,6 +170,7 @@ void OLED_Clear(void)
 {
     uint8_t page;
     uint8_t x;
+    /* Clear every page/column pair in display RAM. */
     for (page = 0U; page < 8U; page++)
     {
         set_pos(0U, page);
@@ -174,6 +185,7 @@ void OLED_ShowString(uint8_t x, uint8_t page, const char *str)
 {
     uint8_t i;
     set_pos(x, page);
+    /* The compact font table intentionally supports only space through uppercase Z. */
     while (*str && x < 122U)
     {
         char ch = *str++;
@@ -194,6 +206,7 @@ void OLED_ShowUInt(uint8_t x, uint8_t page, uint16_t value)
     char buf[6];
     uint8_t i = 0U;
     uint8_t j;
+    /* Convert decimal digits in reverse order, then render one character at a time. */
     do
     {
         buf[i++] = (char)('0' + (value % 10U));

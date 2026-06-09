@@ -10,6 +10,7 @@
 #include "ir.h"
 #include "car_config.h"
 
+/* Top-level run modes selected by automatic logic, remote input, or safety stop. */
 typedef enum
 {
     CAR_MODE_AUTO = 0,
@@ -17,6 +18,7 @@ typedef enum
     CAR_MODE_STOP
 } CarMode;
 
+/* Application state shared by the cooperative task and helper routines. */
 static CarMode s_mode = CAR_MODE_AUTO;
 static int16_t s_speed = CAR_DEFAULT_SPEED;
 static uint16_t s_distance_cm = 0U;
@@ -29,6 +31,7 @@ static int16_t s_motor_left = 0;
 static int16_t s_motor_right = 0;
 static uint8_t s_remote_forward_running = 0U;
 
+/* Keep requested speed inside the usable PWM range for this chassis. */
 static int16_t limit_speed(int16_t speed)
 {
     if (speed > CAR_SPEED_MAX) return CAR_SPEED_MAX;
@@ -36,6 +39,7 @@ static int16_t limit_speed(int16_t speed)
     return speed;
 }
 
+/* Convert one decoded remote-control key into a motor or mode command. */
 static void drive_from_key(IrKey key)
 {
     switch (key)
@@ -91,6 +95,7 @@ static void drive_from_key(IrKey key)
             break;
         case IR_KEY_FORWARD_TOGGLE:
             s_mode = CAR_MODE_REMOTE;
+            /* The center key is latched: first press runs forward, second press stops. */
             if (s_remote_forward_running)
             {
                 Motor_Stop();
@@ -117,6 +122,7 @@ static void drive_from_key(IrKey key)
     }
 }
 
+/* Non-blocking serial command parser for quick PC-side debugging and control. */
 static void handle_serial(void)
 {
     int ch = Usart1_ReadCharNonBlock();
@@ -142,6 +148,7 @@ static void handle_serial(void)
     }
 }
 
+/* Read a complete infrared frame, map it to a car command, and update timeout state. */
 static void handle_ir(void)
 {
     uint32_t raw;
@@ -157,6 +164,7 @@ static void handle_ir(void)
     }
 }
 
+/* Automatic obstacle avoidance based on the latest ultrasonic measurement. */
 static void auto_drive(void)
 {
     static uint8_t turn_side;
@@ -164,6 +172,7 @@ static void auto_drive(void)
     if (s_us_status != ULTRASONIC_OK)
     {
         s_close_confirm = 0U;
+        /* No echo usually means the path is clear or out of range; other errors stop. */
         if (s_us_status == ULTRASONIC_NO_ECHO)
         {
             Motor_SetSpeed(s_speed, s_speed);
@@ -177,8 +186,9 @@ static void auto_drive(void)
             s_motor_right = 0;
         }
     }
-    else if (s_distance_cm < CAR_OBSTACLE_STOP_CM)
+    else if (s_distance_cm <= CAR_OBSTACLE_STOP_CM)
     {
+        /* Turn only when the obstacle is at or inside the configured close threshold. */
         if (s_close_confirm < CAR_US_CLOSE_CONFIRM)
         {
             s_close_confirm++;
@@ -188,6 +198,7 @@ static void auto_drive(void)
         }
         else
         {
+            /* Back away, then alternate turn direction to avoid getting stuck. */
             Motor_SetSpeed((int16_t)-300, (int16_t)-300);
             s_motor_left = -300;
             s_motor_right = -300;
@@ -224,6 +235,7 @@ static void auto_drive(void)
     }
 }
 
+/* Refresh the 128x64 OLED with operating state and live debug diagnostics. */
 static void update_display(int16_t enc)
 {
     OLED_Clear();
@@ -288,6 +300,7 @@ static void update_display(int16_t enc)
     OLED_ShowUInt(60U, 7U, (uint16_t)((s_motor_left < 0) ? -s_motor_left : s_motor_left));
 }
 
+/* Emit one compact serial debug line for sensor, motor, and IR decoder status. */
 static void send_ultrasonic_debug(void)
 {
     Usart1_SendString(" us_st=");
@@ -322,6 +335,7 @@ static void send_ultrasonic_debug(void)
 
 void App_CarInit(void)
 {
+    /* Hardware is initialized from low-level BSP drivers upward to application devices. */
     Bsp_GpioInit();
     Bsp_TimeInit();
     Usart1_Init();
@@ -341,6 +355,7 @@ void App_CarInit(void)
 
 void App_CarTask(void)
 {
+    /* These timestamps implement cooperative scheduling without blocking the main loop. */
     static uint32_t last_us_ms;
     static uint32_t last_mpu_ms;
     static uint32_t last_ctrl_ms;
@@ -353,12 +368,14 @@ void App_CarTask(void)
 
     if ((uint32_t)(Bsp_Millis() - last_us_ms) >= 80U)
     {
+        /* Ultrasonic sampling is slower than control to avoid sensor self-interference. */
         last_us_ms = Bsp_Millis();
         s_us_status = Ultrasonic_ReadCmEx(&s_distance_cm);
     }
 
     if ((uint32_t)(Bsp_Millis() - last_mpu_ms) >= 40U)
     {
+        /* Tilt protection is refreshed from raw acceleration data when the MPU is present. */
         last_mpu_ms = Bsp_Millis();
         if (s_mpu_ok && MPU6050_ReadRaw(&mpu))
         {
@@ -368,6 +385,7 @@ void App_CarTask(void)
 
     if ((uint32_t)(Bsp_Millis() - last_ctrl_ms) >= 20U)
     {
+        /* Main control tick: process safety, auto drive, and remote timeout behavior. */
         last_ctrl_ms = Bsp_Millis();
 #if CAR_USE_ENCODER
         enc_delta = Encoder_ReadDelta();
@@ -377,6 +395,7 @@ void App_CarTask(void)
 
         if (s_tilted)
         {
+            /* Tilt is treated as a hard safety condition and overrides every mode. */
             Motor_Brake();
             s_motor_left = 0;
             s_motor_right = 0;
@@ -390,6 +409,7 @@ void App_CarTask(void)
                  !s_remote_forward_running &&
                  (uint32_t)(Bsp_Millis() - s_last_remote_ms) > CAR_REMOTE_TIMEOUT_MS)
         {
+            /* Momentary remote motions stop automatically if commands stop arriving. */
             Motor_Stop();
             s_motor_left = 0;
             s_motor_right = 0;
@@ -398,6 +418,7 @@ void App_CarTask(void)
 
     if ((uint32_t)(Bsp_Millis() - last_disp_ms) >= 300U)
     {
+        /* Human-readable diagnostics are throttled so they do not dominate the loop. */
         last_disp_ms = Bsp_Millis();
         Bsp_GpioToggle(LED_PORT, LED_PIN);
         update_display(enc_delta);
